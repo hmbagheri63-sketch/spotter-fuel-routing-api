@@ -1,0 +1,12 @@
+services:
+  web:
+    build: .
+    container_name: spotter_fuel_router
+    command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - .:/app
+    ports:
+      - "2400:8000"
+    environment:
+      - DEBUG=True
+    restart: unless-stopped

@@ -1,0 +1,1182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Spotter Fleet Logistics | Driver Route Optimizer</title>
+  <link rel="icon" type="image/png" href="/static/logo.png">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg-dark: #070d17;
+      --panel-bg: rgba(15, 23, 42, 0.97);
+      --card-bg: #0f172a;
+      --card-border: #1e293b;
+      --accent-blue: #38bdf8;
+      --accent-green: #22c55e;
+      --accent-amber: #f59e0b;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --input-bg: #090e17;
+      --sidebar-width: 440px;
+      --toast-error: #ef4444;
+      --toast-success: #22c55e;
+      --toast-info: #38bdf8;
+    }
+    body.light-mode {
+      --bg-dark: #f1f5f9;
+      --panel-bg: rgba(255, 255, 255, 0.98);
+      --card-bg: #ffffff;
+      --card-border: #e2e8f0;
+      --accent-blue: #0284c7;
+      --accent-green: #16a34a;
+      --accent-amber: #d97706;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --input-bg: #f8fafc;
+      --toast-error: #dc2626;
+      --toast-success: #16a34a;
+      --toast-info: #0284c7;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+      transition: background-color 0.25s, color 0.25s;
+    }
+
+    /* Collapsible Sidebar Wrapper */
+    #sidebar-wrapper {
+      position: relative;
+      display: flex;
+      z-index: 1000;
+    }
+    #sidebar {
+      width: var(--sidebar-width);
+      min-width: var(--sidebar-width);
+      height: 100vh;
+      background: var(--panel-bg);
+      border-right: 1px solid var(--card-border);
+      display: flex;
+      flex-direction: column;
+      backdrop-filter: blur(12px);
+      transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: 4px 0 24px rgba(0,0,0,0.25);
+    }
+    #sidebar.collapsed {
+      margin-left: calc(-1 * var(--sidebar-width));
+    }
+
+    /* Toggle Handle */
+    #sidebar-toggle {
+      position: absolute;
+      top: 24px;
+      right: -28px;
+      width: 28px;
+      height: 38px;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-left: none;
+      border-radius: 0 8px 8px 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: var(--text-muted);
+      box-shadow: 4px 2px 8px rgba(0,0,0,0.15);
+      transition: color 0.2s, background-color 0.2s;
+      z-index: 1001;
+    }
+    #sidebar-toggle:hover {
+      color: var(--accent-blue);
+      background: var(--panel-bg);
+    }
+
+    /* Header */
+    .header {
+      padding: 18px 22px;
+      border-bottom: 1px solid var(--card-border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .header-brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .brand-icon {
+      width: 52px;
+      height: 52px;
+      background: transparent;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    .brand-icon img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+    .brand-title {
+      font-size: 1.05rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+    .brand-sub {
+      font-size: 0.65rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .pulse-dot {
+      width: 6px;
+      height: 6px;
+      background-color: var(--accent-green);
+      border-radius: 50%;
+      box-shadow: 0 0 8px var(--accent-green);
+    }
+
+    .theme-toggle-btn {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      color: var(--text-main);
+      padding: 6px 10px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.82rem;
+      font-weight: 600;
+    }
+
+    /* Progress Bar */
+    .progress-container {
+      width: 100%;
+      height: 4px;
+      background: transparent;
+      overflow: hidden;
+      display: none;
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 2000;
+    }
+    .progress-bar-moving {
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, var(--accent-blue), var(--accent-green), transparent);
+      animation: indeterminate 1.4s infinite linear;
+    }
+    @keyframes indeterminate {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(100%); }
+    }
+
+    .content {
+      padding: 18px 22px;
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    .form-group { margin-bottom: 12px; }
+    .label-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 5px;
+    }
+    label {
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+    }
+    .locate-link {
+      font-size: 0.7rem;
+      color: var(--accent-blue);
+      cursor: pointer;
+      text-decoration: underline;
+    }
+
+    .input-wrap {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+    .autocomplete-wrap {
+      position: relative;
+      width: 100%;
+    }
+    .autocomplete-list {
+      position: absolute;
+      top: calc(100% + 4px);
+      left: 0;
+      z-index: 1100;
+      width: 100%;
+      max-height: 240px;
+      overflow-y: auto;
+      padding: 4px;
+      list-style: none;
+      background: var(--panel-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+    }
+    .autocomplete-list[hidden] { display: none; }
+    .autocomplete-list button {
+      width: 100%;
+      padding: 9px 10px;
+      border: 0;
+      border-radius: 5px;
+      background: transparent;
+      color: var(--text-main);
+      text-align: left;
+      font: inherit;
+      cursor: pointer;
+    }
+    .autocomplete-list button:hover,
+    .autocomplete-list button:focus {
+      background: var(--input-bg);
+      color: var(--accent-blue);
+      outline: none;
+    }
+    input {
+      width: 100%;
+      background: var(--input-bg);
+      border: 1px solid var(--card-border);
+      color: var(--text-main);
+      padding: 10px 12px;
+      border-radius: 8px;
+      font-size: 0.88rem;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    input:focus { border-color: var(--accent-blue); }
+
+    .btn-submit {
+      width: 100%;
+      background: linear-gradient(135deg, #0284c7, #2563eb);
+      color: white;
+      border: none;
+      padding: 12px;
+      border-radius: 8px;
+      font-weight: 700;
+      font-size: 0.9rem;
+      cursor: pointer;
+      box-shadow: 0 4px 14px rgba(2, 132, 199, 0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: opacity 0.2s;
+    }
+    .btn-submit:hover { opacity: 0.95; }
+
+    .quick-presets {
+      display: flex;
+      gap: 6px;
+      margin-top: 8px;
+      margin-bottom: 16px;
+    }
+    .preset-pill {
+      font-size: 0.72rem;
+      font-weight: 600;
+      background: var(--card-bg);
+      padding: 5px 8px;
+      border-radius: 6px;
+      cursor: pointer;
+      color: var(--text-muted);
+      border: 1px solid var(--card-border);
+      flex: 1;
+      text-align: center;
+    }
+    .preset-pill:hover {
+      border-color: var(--accent-blue);
+      color: var(--text-main);
+    }
+
+    /* Driver Rig Specifications Card */
+    .driver-status-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      padding: 14px;
+      margin-top: 14px;
+    }
+    .status-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--card-border);
+      padding-bottom: 8px;
+      margin-bottom: 10px;
+    }
+    .status-title {
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+    }
+    .spec-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .spec-item {
+      background: var(--input-bg);
+      padding: 8px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--card-border);
+    }
+    .spec-label {
+      font-size: 0.65rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+    }
+    .spec-val {
+      font-size: 0.9rem;
+      font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--accent-blue);
+      margin-top: 2px;
+    }
+
+    /* Metrics Grid */
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 14px;
+      margin-bottom: 16px;
+    }
+    .metric-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      padding: 12px;
+      border-radius: 8px;
+    }
+    .metric-title {
+      font-size: 0.68rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .metric-value {
+      font-size: 1.2rem;
+      font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+      margin-top: 4px;
+    }
+    .metric-savings { color: var(--accent-green); }
+    .metric-cost { color: var(--accent-blue); }
+
+    /* Stops Section */
+    .stops-header-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .stops-header-row h3 {
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+    }
+    .btn-export {
+      background: rgba(34, 197, 94, 0.15);
+      border: 1px solid rgba(34, 197, 94, 0.3);
+      color: var(--accent-green);
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .stop-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-left: 4px solid var(--accent-amber);
+      padding: 12px 14px;
+      border-radius: 8px;
+      margin-bottom: 10px;
+      cursor: pointer;
+      transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+    }
+    .stop-card:hover,
+    .stop-card.is-active {
+      transform: translateX(3px) scale(1.01);
+      border-color: var(--accent-blue);
+      box-shadow: 0 8px 20px rgba(2, 132, 199, 0.16);
+    }
+    .brand-pill {
+      font-size: 0.65rem;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 4px;
+      margin-right: 6px;
+    }
+    .brand-sheetz { background: #dc2626; color: white; }
+    .brand-pilot { background: #ea580c; color: white; }
+    .brand-quiktrip { background: #b91c1c; color: white; }
+    .brand-maverik { background: #0284c7; color: white; }
+    .brand-kum { background: #16a34a; color: white; }
+    .brand-generic { background: #475569; color: white; }
+
+    .stop-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 4px;
+    }
+    .stop-name {
+      font-size: 0.84rem;
+      font-weight: 600;
+      color: var(--text-main);
+    }
+    .stop-price {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: var(--accent-green);
+    }
+    .stop-sub {
+      font-size: 0.74rem;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+    .fuel-bar-wrap {
+      height: 5px;
+      background: var(--input-bg);
+      border-radius: 3px;
+      overflow: hidden;
+      border: 1px solid var(--card-border);
+    }
+    .fuel-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #22c55e, #38bdf8);
+    }
+
+    #map-stage {
+      position: relative;
+      flex: 1;
+      min-width: 0;
+      height: 100vh;
+    }
+    #map {
+      width: 100%;
+      height: 100%;
+      background: var(--bg-dark);
+    }
+    #route-hud {
+      position: absolute;
+      top: 22px;
+      left: 50%;
+      z-index: 800;
+      display: flex;
+      align-items: stretch;
+      gap: 0;
+      max-width: calc(100% - 36px);
+      padding: 10px;
+      color: var(--text-main);
+      background: var(--panel-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2);
+      backdrop-filter: blur(16px);
+      transform: translateX(-50%);
+    }
+    #route-hud[hidden] { display: none; }
+    .hud-metric {
+      min-width: 125px;
+      padding: 2px 16px;
+    }
+    .hud-metric + .hud-metric {
+      border-left: 1px solid var(--card-border);
+    }
+    .hud-label {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--text-muted);
+      font-size: 0.62rem;
+      font-weight: 700;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+    .hud-value {
+      display: block;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.95rem;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .hud-savings {
+      color: var(--accent-green);
+    }
+    .hud-savings .hud-value {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 5px 9px;
+      border: 1px solid rgba(34, 197, 94, 0.3);
+      border-radius: 999px;
+      background: rgba(34, 197, 94, 0.12);
+    }
+    .stop-marker-content {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.35));
+      transition: transform 0.18s ease, filter 0.18s ease;
+      transform-origin: center bottom;
+    }
+    .stop-marker-icon {
+      background: transparent;
+      border: 0;
+    }
+    .stop-marker-icon.is-active .stop-marker-content {
+      transform: scale(1.2);
+      filter: drop-shadow(0 0 8px rgba(34, 197, 94, 0.85));
+    }
+    .stop-marker-price {
+      padding: 3px 6px;
+      color: #052e16;
+      background: #bbf7d0;
+      border: 1px solid #22c55e;
+      border-radius: 5px;
+      font: 700 10px 'JetBrains Mono', monospace;
+      line-height: 1.15;
+      white-space: nowrap;
+    }
+    .stop-marker-pin {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 30px;
+      height: 30px;
+      color: white;
+      background: linear-gradient(145deg, #22c55e, #15803d);
+      border: 2px solid white;
+      border-radius: 50% 50% 50% 4px;
+      box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.35);
+      transform: rotate(-45deg);
+    }
+    .stop-marker-number {
+      font: 800 10px 'Inter', sans-serif;
+      transform: rotate(45deg);
+    }
+    @media (max-width: 760px) {
+      #route-hud {
+        top: 14px;
+        max-width: calc(100% - 24px);
+        padding: 8px 4px;
+      }
+      .hud-metric {
+        min-width: 0;
+        padding: 2px 9px;
+      }
+      .hud-label {
+        font-size: 0.52rem;
+        letter-spacing: 0.04em;
+      }
+      .hud-value { font-size: 0.78rem; }
+    }
+    @media (max-width: 420px) {
+      #route-hud { gap: 0; }
+      .hud-metric { padding: 2px 6px; }
+      .hud-label { white-space: normal; }
+    }
+
+    #toast-container {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      width: min(380px, calc(100vw - 32px));
+      pointer-events: none;
+    }
+    .toast {
+      --toast-accent: var(--toast-info);
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 14px 16px;
+      background: var(--card-bg);
+      color: var(--text-main);
+      border: 1px solid var(--card-border);
+      border-left: 4px solid var(--toast-accent);
+      border-radius: 10px;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.24);
+      cursor: pointer;
+      pointer-events: auto;
+      opacity: 0;
+      transform: translateX(24px);
+      animation: toast-slide-in 0.28s ease forwards;
+      transition: opacity 0.25s ease, transform 0.25s ease;
+    }
+    .toast-error { --toast-accent: var(--toast-error); }
+    .toast-success { --toast-accent: var(--toast-success); }
+    .toast-info { --toast-accent: var(--toast-info); }
+    .toast.is-dismissing {
+      opacity: 0;
+      transform: translateX(24px);
+    }
+    .toast-icon {
+      flex: 0 0 22px;
+      width: 22px;
+      height: 22px;
+      color: var(--toast-accent);
+    }
+    .toast-icon svg {
+      display: block;
+      width: 100%;
+      height: 100%;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .toast-content { min-width: 0; }
+    .toast-title {
+      margin-bottom: 3px;
+      font-size: 0.88rem;
+      font-weight: 700;
+    }
+    .toast-message {
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
+    @keyframes toast-slide-in {
+      to { opacity: 1; transform: translateX(0); }
+    }
+    @media (max-width: 480px) {
+      #toast-container { top: 12px; right: 12px; }
+    }
+  </style>
+</head>
+<body>
+
+  <div id="toast-container" aria-live="polite" aria-atomic="false"></div>
+
+  <div id="sidebar-wrapper">
+    <aside id="sidebar">
+      <div class="progress-container" id="loading-bar">
+        <div class="progress-bar-moving"></div>
+      </div>
+
+      <div class="header">
+        <div class="header-brand">
+          <div class="brand-icon">
+            <img src="/static/logo.png" alt="Spotter Logo" />
+          </div>
+          <div>
+            <div class="brand-title">Spotter Fleet</div>
+            <div class="brand-sub"><span class="pulse-dot"></span> DISPATCH V1.0</div>
+          </div>
+        </div>
+        <button class="theme-toggle-btn" id="theme-btn" onclick="toggleTheme()">☀️ Light</button>
+      </div>
+
+      <div class="content">
+        <div class="form-group">
+          <div class="label-row">
+            <label>Origin Terminal (GPS / City)</label>
+            <span class="locate-link" onclick="useCurrentLocation()">Use GPS</span>
+          </div>
+          <div class="autocomplete-wrap">
+            <input type="text" id="start-input" value="40.7128, -74.0060" placeholder="Latitude, Longitude" autocomplete="off" />
+            <ul class="autocomplete-list" id="start-suggestions" role="listbox" hidden></ul>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <div class="label-row">
+            <label>Destination Dropoff</label>
+          </div>
+          <div class="autocomplete-wrap">
+            <input type="text" id="finish-input" value="34.0522, -118.2437" placeholder="Latitude, Longitude" autocomplete="off" />
+            <ul class="autocomplete-list" id="finish-suggestions" role="listbox" hidden></ul>
+          </div>
+        </div>
+
+        <div class="quick-presets">
+          <span class="preset-pill" onclick="setPreset('40.7128, -74.0060', '34.0522, -118.2437')">NYC &rarr; LAX</span>
+          <span class="preset-pill" onclick="setPreset('47.6062, -122.3321', '25.7617, -80.1918')">SEA &rarr; MIA</span>
+          <span class="preset-pill" onclick="setPreset('41.8781, -87.6298', '29.7604, -95.3698')">ORD &rarr; IAH</span>
+        </div>
+
+        <button class="btn-submit" id="btn-run" onclick="calculateRoute()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polyline></svg>
+          Optimize Fuel & Routing
+        </button>
+
+        <!-- Driver Rig Specifications Card -->
+        <div class="driver-status-card" id="rig-specs-panel">
+          <div class="status-card-header">
+            <span class="status-title">Assigned Rig Parameters</span>
+            <span style="font-size: 0.65rem; color: var(--accent-green); font-weight: 700;">ACTIVE CONFIG</span>
+          </div>
+          <div class="spec-grid">
+            <div class="spec-item">
+              <div class="spec-label">Range Limit</div>
+              <div class="spec-val">500 Miles</div>
+            </div>
+            <div class="spec-item">
+              <div class="spec-label">Consumption</div>
+              <div class="spec-val">10.0 MPG</div>
+            </div>
+            <div class="spec-item">
+              <div class="spec-label">Reserve Limit</div>
+              <div class="spec-val">50 Miles</div>
+            </div>
+            <div class="spec-item">
+              <div class="spec-label">Network Stops</div>
+              <div class="spec-val">7,524 Opis</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="metrics-grid" id="metrics-area" style="display: none;">
+          <div class="metric-card">
+            <div class="metric-title">Optimal Fuel Cost</div>
+            <div class="metric-value metric-cost" id="m-cost">$0.00</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-title">Benchmark Savings</div>
+            <div class="metric-value metric-savings" id="m-savings">$0.00</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-title">Trip Distance</div>
+            <div class="metric-value" id="m-dist">0 mi</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-title">Required Stops</div>
+            <div class="metric-value" id="m-stops">0</div>
+          </div>
+        </div>
+
+        <div class="stops-section" id="stops-container" style="display: none;">
+          <div class="stops-header-row">
+            <h3>Refueling Manifest</h3>
+            <button class="btn-export" onclick="exportManifestCSV()">&#8595; Export CSV</button>
+          </div>
+          <div id="stops-list"></div>
+        </div>
+      </div>
+    </aside>
+
+    <div id="sidebar-toggle" onclick="toggleSidebar()" title="Toggle Sidebar">
+      <svg id="toggle-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>
+    </div>
+  </div>
+
+  <div id="map-stage">
+    <div id="map"></div>
+    <section id="route-hud" aria-label="Route summary" hidden>
+      <div class="hud-metric">
+        <span class="hud-label">Est. Drive</span>
+        <span class="hud-value" id="hud-drive-time">—</span>
+      </div>
+      <div class="hud-metric">
+        <span class="hud-label">Avg. Fuel / Gal</span>
+        <span class="hud-value" id="hud-fuel-cost">—</span>
+      </div>
+      <div class="hud-metric hud-savings">
+        <span class="hud-label">Guaranteed Savings</span>
+        <span class="hud-value" id="hud-savings">—</span>
+      </div>
+    </section>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const map = L.map('map', { zoomControl: false }).setView([39.8283, -98.5795], 4);
+    L.control.zoom({ position: 'topright' }).addTo(map);
+
+    const darkTiles = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+      maxZoom: 16,
+      attribution: 'Tiles &copy; Esri'
+    });
+
+    const lightTiles = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+      maxZoom: 16,
+      attribution: 'Tiles &copy; Esri'
+    });
+
+    let currentTileLayer = darkTiles.addTo(map);
+
+    let routeLayer = null;
+    let markersLayer = L.layerGroup().addTo(map);
+    let currentStopsData = [];
+    let stopMarkers = [];
+
+    function setStopActive(index, isActive) {
+      const marker = stopMarkers[index];
+      const card = document.querySelector(`.stop-card[data-stop-index="${index}"]`);
+      if (card) card.classList.toggle('is-active', isActive);
+      if (marker) {
+        const markerElement = marker.getElement();
+        if (markerElement) markerElement.classList.toggle('is-active', isActive);
+        marker.setZIndexOffset(isActive ? 1000 : 0);
+      }
+    }
+
+    function focusStop(index) {
+      const stop = currentStopsData[index];
+      const marker = stopMarkers[index];
+      if (!stop || !marker) return;
+      setStopActive(index, true);
+      map.flyTo([stop.latitude, stop.longitude], 11, { duration: 1.2 });
+      marker.openPopup();
+    }
+
+    function showToast(title, message, type = 'info') {
+      const icons = {
+        error: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 8v4m0 4h.01"></path></svg>',
+        success: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="m8 12 2.5 2.5L16 9"></path></svg>',
+        info: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v5m0-8h.01"></path></svg>'
+      };
+      const toastType = Object.prototype.hasOwnProperty.call(icons, type) ? type : 'info';
+      const toast = document.createElement('div');
+      toast.className = `toast toast-${toastType}`;
+      toast.setAttribute('role', toastType === 'error' ? 'alert' : 'status');
+
+      const icon = document.createElement('span');
+      icon.className = 'toast-icon';
+      icon.innerHTML = icons[toastType];
+
+      const content = document.createElement('div');
+      content.className = 'toast-content';
+      const heading = document.createElement('div');
+      heading.className = 'toast-title';
+      heading.textContent = title;
+      const detail = document.createElement('div');
+      detail.className = 'toast-message';
+      detail.textContent = message;
+      content.append(heading, detail);
+      toast.append(icon, content);
+
+      const container = document.getElementById('toast-container');
+      container.appendChild(toast);
+
+      let dismissed = false;
+      const dismiss = () => {
+        if (dismissed) return;
+        dismissed = true;
+        toast.classList.add('is-dismissing');
+        setTimeout(() => toast.remove(), 280);
+      };
+      toast.addEventListener('click', dismiss);
+      setTimeout(dismiss, 4500);
+    }
+
+    function toggleSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      const icon = document.getElementById('toggle-icon');
+      sidebar.classList.toggle('collapsed');
+      
+      const isCollapsed = sidebar.classList.contains('collapsed');
+      icon.innerHTML = isCollapsed 
+        ? '<polyline points="9 18 15 12 9 6"></polyline>' 
+        : '<polyline points="15 18 9 12 15 6"></polyline>';
+
+      setTimeout(() => { map.invalidateSize(); }, 300);
+    }
+
+    function toggleTheme() {
+      const isLight = document.body.classList.toggle('light-mode');
+      const btn = document.getElementById('theme-btn');
+      
+      map.removeLayer(currentTileLayer);
+      if (isLight) {
+        currentTileLayer = lightTiles.addTo(map);
+        btn.innerHTML = '🌙 Dark';
+        localStorage.setItem('theme', 'light');
+      } else {
+        currentTileLayer = darkTiles.addTo(map);
+        btn.innerHTML = '☀️ Light';
+        localStorage.setItem('theme', 'dark');
+      }
+    }
+
+    if (localStorage.getItem('theme') === 'light') {
+      toggleTheme();
+    }
+
+    function useCurrentLocation() {
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            setLocationInput(
+              document.getElementById('start-input'),
+              `${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)}`
+            );
+          },
+          () => { showToast('Dispatch Error', 'GPS access was denied or unavailable.', 'error'); }
+        );
+      }
+    }
+
+    function setPreset(start, end) {
+      setLocationInput(document.getElementById('start-input'), start);
+      setLocationInput(document.getElementById('finish-input'), end);
+      calculateRoute();
+    }
+
+    function setLocationInput(input, value) {
+      input.value = value;
+      delete input.dataset.lat;
+      delete input.dataset.lon;
+    }
+
+    function hideCitySuggestions(list) {
+      list.replaceChildren();
+      list.hidden = true;
+    }
+
+    function hideOtherCitySuggestions(activeList) {
+      document.querySelectorAll('.autocomplete-list').forEach(list => {
+        if (list !== activeList) hideCitySuggestions(list);
+      });
+    }
+
+    function showCitySuggestions(input, list, cities) {
+      hideOtherCitySuggestions(list);
+      list.replaceChildren();
+      cities.forEach(city => {
+        const item = document.createElement('li');
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.role = 'option';
+        button.textContent = city.display;
+        button.addEventListener('click', () => {
+          input.value = city.display;
+          input.dataset.lat = city.lat;
+          input.dataset.lon = city.lon;
+          hideOtherCitySuggestions(list);
+          hideCitySuggestions(list);
+        });
+        item.appendChild(button);
+        list.appendChild(item);
+      });
+      list.hidden = cities.length === 0;
+    }
+
+    function setupCityAutocomplete(inputId, listId) {
+      const input = document.getElementById(inputId);
+      const list = document.getElementById(listId);
+      let debounceTimer;
+      let latestRequest = 0;
+
+      input.addEventListener('focus', () => hideOtherCitySuggestions(list));
+      input.addEventListener('input', () => {
+        hideOtherCitySuggestions(list);
+        delete input.dataset.lat;
+        delete input.dataset.lon;
+        clearTimeout(debounceTimer);
+
+        const query = input.value.trim();
+        if (query.length < 2) {
+          latestRequest += 1;
+          hideCitySuggestions(list);
+          return;
+        }
+
+        debounceTimer = setTimeout(async () => {
+          const requestId = ++latestRequest;
+          try {
+            const response = await fetch(`/api/cities/?q=${encodeURIComponent(query)}`);
+            if (!response.ok) throw new Error(`City search failed (${response.status})`);
+            const cities = await response.json();
+            if (requestId === latestRequest && input.value.trim() === query) {
+              showCitySuggestions(input, list, cities);
+            }
+          } catch (error) {
+            if (requestId === latestRequest) hideCitySuggestions(list);
+            console.error('City autocomplete error:', error);
+          }
+        }, 300);
+      });
+    }
+
+    document.addEventListener('click', event => {
+      if (!event.target.closest('.autocomplete-wrap')) {
+        document.querySelectorAll('.autocomplete-list').forEach(hideCitySuggestions);
+      }
+    });
+
+    setupCityAutocomplete('start-input', 'start-suggestions');
+    setupCityAutocomplete('finish-input', 'finish-suggestions');
+
+    function parseInput(input) {
+      if (input.dataset.lat !== undefined && input.dataset.lon !== undefined) {
+        return { lat: parseFloat(input.dataset.lat), lon: parseFloat(input.dataset.lon) };
+      }
+      const parts = input.value.split(',').map(s => s.trim());
+      if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+        return { lat: parseFloat(parts[0]), lon: parseFloat(parts[1]) };
+      }
+      return { location_name: input.value };
+    }
+
+    function getBrandPill(name) {
+      const up = name.toUpperCase();
+      if (up.includes('SHEETZ')) return '<span class="brand-pill brand-sheetz">SHEETZ</span>';
+      if (up.includes('PILOT') || up.includes('FLYING J')) return '<span class="brand-pill brand-pilot">PILOT</span>';
+      if (up.includes('QUIKTRIP')) return '<span class="brand-pill brand-quiktrip">QUIKTRIP</span>';
+      if (up.includes('MAVERIK')) return '<span class="brand-pill brand-maverik">MAVERIK</span>';
+      if (up.includes('KUM & GO')) return '<span class="brand-pill brand-kum">KUM & GO</span>';
+      return '<span class="brand-pill brand-generic">TRUCKSTOP</span>';
+    }
+
+    async function calculateRoute() {
+      const btn = document.getElementById('btn-run');
+      const progressBar = document.getElementById('loading-bar');
+
+      btn.innerHTML = 'Analyzing Corridors...';
+      btn.disabled = true;
+      progressBar.style.display = 'block';
+
+      const payload = {
+        start: parseInput(document.getElementById('start-input')),
+        finish: parseInput(document.getElementById('finish-input'))
+      };
+
+      try {
+        const res = await fetch('/api/route/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || JSON.stringify(data));
+
+        showToast('Route Dispatched', 'Optimized fuel stops generated successfully.', 'success');
+        currentStopsData = data.fuel_stops;
+
+        document.getElementById('metrics-area').style.display = 'grid';
+        document.getElementById('stops-container').style.display = 'block';
+
+        document.getElementById('m-cost').innerText = '$' + data.total_fuel_cost.toFixed(2);
+        document.getElementById('m-savings').innerText = '$' + data.total_savings_usd.toFixed(2);
+        document.getElementById('m-dist').innerText = Math.round(data.total_distance_miles) + ' mi';
+        document.getElementById('m-stops').innerText = data.fuel_stops_count;
+
+        const totalDriveMinutes = Math.round((data.total_distance_miles / 65) * 60);
+        const driveWholeHours = Math.floor(totalDriveMinutes / 60);
+        const driveMinutes = totalDriveMinutes % 60;
+        const averageFuelCost = data.total_gallons_consumed > 0
+          ? data.total_fuel_cost / data.total_gallons_consumed
+          : 0;
+        document.getElementById('hud-drive-time').textContent =
+          `${driveWholeHours}h ${driveMinutes}m`;
+        document.getElementById('hud-fuel-cost').textContent =
+          `$${averageFuelCost.toFixed(2)}`;
+        document.getElementById('hud-savings').textContent =
+          `$${data.total_savings_usd.toFixed(2)} saved`;
+        document.getElementById('route-hud').hidden = false;
+
+        const list = document.getElementById('stops-list');
+        list.innerHTML = '';
+        markersLayer.clearLayers();
+        stopMarkers = [];
+
+        data.fuel_stops.forEach((s, idx) => {
+          const card = document.createElement('div');
+          card.className = 'stop-card';
+          card.dataset.stopIndex = idx;
+          card.tabIndex = 0;
+          card.setAttribute('role', 'button');
+          card.setAttribute('aria-label', `Focus stop ${idx + 1}: ${s.name}`);
+          const fillPercent = Math.min(100, Math.round((s.gallons_refueled / 50.0) * 100));
+
+          card.innerHTML = `
+            <div class="stop-header">
+              <span class="stop-name">${getBrandPill(s.name)}#${idx+1} ${s.name}</span>
+              <span class="stop-price">$${s.price.toFixed(3)}/gal</span>
+            </div>
+            <div class="stop-sub">${s.city}, ${s.state} &bull; Mile ${s.route_mile.toFixed(0)} &bull; +${s.gallons_refueled} gal ($${s.cost_at_stop})</div>
+            <div class="fuel-bar-wrap" title="Tank capacity refilled: ${fillPercent}%">
+              <div class="fuel-bar-fill" style="width: ${fillPercent}%;"></div>
+            </div>
+          `;
+          card.addEventListener('mouseenter', () => setStopActive(idx, true));
+          card.addEventListener('mouseleave', () => setStopActive(idx, false));
+          card.addEventListener('focus', () => setStopActive(idx, true));
+          card.addEventListener('blur', () => setStopActive(idx, false));
+          card.addEventListener('click', () => focusStop(idx));
+          card.addEventListener('keydown', event => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              focusStop(idx);
+            }
+          });
+          list.appendChild(card);
+
+          const marker = L.marker([s.latitude, s.longitude], {
+            icon: L.divIcon({
+              className: 'stop-marker-icon',
+              html: `<div class="stop-marker-content"><span class="stop-marker-price">$${s.price.toFixed(3)}</span><span class="stop-marker-pin"><span class="stop-marker-number">#${idx + 1}</span></span></div>`,
+              iconSize: [76, 62],
+              iconAnchor: [38, 62],
+              popupAnchor: [0, -58]
+            })
+          }).bindPopup(`<b>Stop #${idx+1}: ${s.name}</b><br>${s.city}, ${s.state}<br><b>Price:</b> $${s.price.toFixed(3)}/gal<br><b>Refuel:</b> ${s.gallons_refueled} gal ($${s.cost_at_stop})`);
+          stopMarkers.push(marker);
+          markersLayer.addLayer(marker);
+        });
+
+        if (routeLayer) map.removeLayer(routeLayer);
+        routeLayer = L.geoJSON(data.route_geojson, {
+          style: { color: '#0284c7', weight: 5, opacity: 0.9 }
+        }).addTo(map);
+
+        map.fitBounds(routeLayer.getBounds(), { padding: [60, 60] });
+
+      } catch (err) {
+        showToast('Dispatch Error', err.message, 'error');
+      } finally {
+        btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polyline></svg> Optimize Fuel & Routing';
+        btn.disabled = false;
+        progressBar.style.display = 'none';
+      }
+    }
+
+    function exportManifestCSV() {
+      if (!currentStopsData || currentStopsData.length === 0) return;
+      let csv = "Stop Number,Station Name,City,State,Price Per Gallon,Gallons Refueled,Total Cost,Route Mile\n";
+      currentStopsData.forEach((s, idx) => {
+        csv += `"${idx+1}","${s.name}","${s.city}","${s.state}","${s.price}","${s.gallons_refueled}","${s.cost_at_stop}","${s.route_mile.toFixed(1)}"\n`;
+      });
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `spotter_route_manifest_${Date.now()}.csv`;
+      a.click();
+    }
+  </script>
+</body>
+</html>
